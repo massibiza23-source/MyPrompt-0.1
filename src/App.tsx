@@ -24,7 +24,9 @@ import {
   MoreVertical,
   ExternalLink,
   BookOpen,
-  Menu
+  Menu,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -44,6 +46,8 @@ interface Category {
   id: string;
   name: string;
   color: string;
+  isPrivate?: boolean;
+  pin?: string;
 }
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -117,7 +121,12 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [unlockedCategories, setUnlockedCategories] = useState<string[]>([]);
+  const [targetCategory, setTargetCategory] = useState<string | null>(null);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; message: string; type?: 'success' | 'error' }[]>([]);
@@ -130,6 +139,8 @@ export default function App() {
 
   // Form State
   const [formData, setFormData] = useState({ title: '', content: '', category: 'writing', tags: '' });
+  const [categoryFormData, setCategoryFormData] = useState({ name: '', color: 'bg-brand-accent', isPrivate: false, pin: '' });
+  const [pinEntry, setPinEntry] = useState('');
 
   const addToast = (message: string, type: 'success' | 'error' = 'success') => {
     const id = generateId();
@@ -161,6 +172,94 @@ export default function App() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingPrompt(null);
+  };
+
+  const handleOpenCategoryModal = (category?: Category) => {
+    if (category) {
+      setEditingCategory(category);
+      setCategoryFormData({ 
+        name: category.name, 
+        color: category.color, 
+        isPrivate: category.isPrivate || false, 
+        pin: category.pin || '' 
+      });
+    } else {
+      setEditingCategory(null);
+      setCategoryFormData({ name: '', color: 'bg-brand-accent', isPrivate: false, pin: '' });
+    }
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleCloseCategoryModal = () => {
+    setIsCategoryModalOpen(false);
+    setEditingCategory(null);
+  };
+
+  const handleSaveCategory = () => {
+    if (!categoryFormData.name) {
+      addToast('El nombre de la categoría es obligatorio', 'error');
+      return;
+    }
+
+    if (categoryFormData.isPrivate && categoryFormData.pin.length < 4) {
+      addToast('El PIN debe tener al menos 4 caracteres', 'error');
+      return;
+    }
+
+    const categoryData = {
+      name: categoryFormData.name,
+      color: categoryFormData.color,
+      isPrivate: categoryFormData.isPrivate,
+      pin: categoryFormData.isPrivate ? categoryFormData.pin : undefined
+    };
+
+    if (editingCategory) {
+      setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...categoryData } : c));
+      addToast('Categoría actualizada');
+    } else {
+      const newCategory: Category = {
+        id: generateId(),
+        ...categoryData
+      };
+      setCategories(prev => [...prev, newCategory]);
+      addToast('Categoría creada');
+    }
+    handleCloseCategoryModal();
+  };
+
+  const handleCategoryClick = (cat: Category) => {
+    if (cat.isPrivate && !unlockedCategories.includes(cat.id)) {
+      setTargetCategory(cat.id);
+      setPinEntry('');
+      setIsPinModalOpen(true);
+    } else {
+      setActiveCategory(cat.id);
+    }
+  };
+
+  const handlePinSubmit = () => {
+    const cat = categories.find(c => c.id === targetCategory);
+    if (cat && cat.pin === pinEntry) {
+      setUnlockedCategories(prev => [...prev, cat.id]);
+      setActiveCategory(cat.id);
+      setIsPinModalOpen(false);
+      setPinEntry('');
+      addToast('Colección desbloqueada');
+    } else {
+      addToast('PIN incorrecto', 'error');
+      setPinEntry('');
+    }
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    if (id === 'all') return;
+    if (confirm('¿Estás seguro? Se borrarán todos los prompts de esta categoría.')) {
+      setPrompts(prev => prev.filter(p => p.category !== id));
+      setCategories(prev => prev.filter(c => c.id !== id));
+      if (activeCategory === id) setActiveCategory('all');
+      addToast('Categoría eliminada');
+      handleCloseCategoryModal();
+    }
   };
 
   const handleSavePrompt = () => {
@@ -296,25 +395,50 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto space-y-1">
-          <h3 className="text-[10px] uppercase tracking-[0.2em] text-brand-muted font-bold mb-4 px-2">Colecciones</h3>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all group ${
-                activeCategory === cat.id 
-                ? 'bg-white border border-brand-border text-brand-text shadow-sm' 
-                : 'text-brand-secondary hover:bg-white/40'
-              }`}
+          <div className="flex items-center justify-between mb-4 px-2">
+            <h3 className="text-[10px] uppercase tracking-[0.2em] text-brand-muted font-bold">Colecciones</h3>
+            <button 
+              onClick={() => handleOpenCategoryModal()}
+              className="p-1 hover:bg-brand-border rounded text-brand-accent transition-colors"
+              title="Añadir Colección"
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />
-                <span>{cat.name}</span>
-              </div>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeCategory === cat.id ? 'bg-brand-border' : 'text-brand-muted'}`}>
-                {cat.id === 'all' ? prompts.length : prompts.filter(p => p.category === cat.id).length}
-              </span>
+              <Plus className="w-3.5 h-3.5" />
             </button>
+          </div>
+          {categories.map((cat) => (
+            <div key={cat.id} className="relative group/cat">
+              <button
+                onClick={() => handleCategoryClick(cat)}
+                className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all group ${
+                  activeCategory === cat.id 
+                  ? 'bg-white border border-brand-border text-brand-text shadow-sm' 
+                  : 'text-brand-secondary hover:bg-white/40'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />
+                  <span className="truncate max-w-[120px]">{cat.name}</span>
+                  {cat.isPrivate && (
+                    unlockedCategories.includes(cat.id) ? 
+                    <Unlock className="w-3 h-3 text-emerald-500/60" /> : 
+                    <Lock className="w-3 h-3 text-brand-accent/60" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeCategory === cat.id ? 'bg-brand-border' : 'text-brand-muted'}`}>
+                    {cat.id === 'all' ? prompts.length : prompts.filter(p => p.category === cat.id).length}
+                  </span>
+                  {cat.id !== 'all' && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleOpenCategoryModal(cat); }}
+                      className="opacity-0 group-hover/cat:opacity-100 p-0.5 hover:bg-brand-border rounded transition-all"
+                    >
+                      <Edit3 className="w-3 h-3 text-brand-muted" />
+                    </button>
+                  )}
+                </div>
+              </button>
+            </div>
           ))}
         </nav>
 
@@ -560,7 +684,7 @@ export default function App() {
                         onChange={(e) => setFormData({...formData, category: e.target.value})}
                         className="w-full bg-white border border-brand-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-accent transition-all appearance-none"
                       >
-                        {DEFAULT_CATEGORIES.filter(c => c.id !== 'all').map(c => (
+                        {categories.filter(c => c.id !== 'all').map(c => (
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
@@ -606,6 +730,188 @@ export default function App() {
                 >
                   {editingPrompt ? 'Actualizar Prompt' : 'Guardar Prompt'}
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      
+      {/* Modal - Category CRUD */}
+      <AnimatePresence>
+        {isCategoryModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseCategoryModal}
+              className="absolute inset-0 bg-brand-text/10 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ scale: 0.98, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.98, opacity: 0, y: 10 }}
+              className="bg-brand-bg w-full max-w-md rounded-2xl shadow-2xl overflow-hidden relative z-60 border border-brand-border"
+            >
+              <div className="p-6 border-b border-brand-border bg-white/50 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-brand-text">
+                  {editingCategory ? 'Editar Colección' : 'Nueva Colección'}
+                </h3>
+                <button onClick={handleCloseCategoryModal} className="p-1.5 hover:bg-black/5 rounded-full transition-all text-brand-muted">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-brand-muted font-bold mb-2">Nombre</label>
+                  <input 
+                    type="text"
+                    autoFocus
+                    value={categoryFormData.name}
+                    onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                    placeholder="Ej: Marketing, Personal..."
+                    className="w-full bg-white border border-brand-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-accent transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-brand-muted font-bold mb-3">Color</label>
+                  <div className="flex flex-wrap gap-3">
+                    {[
+                      'bg-brand-accent', 'bg-blue-400', 'bg-emerald-400', 'bg-purple-400', 
+                      'bg-amber-400', 'bg-rose-400', 'bg-indigo-400', 'bg-slate-400'
+                    ].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => setCategoryFormData({...categoryFormData, color})}
+                        className={`w-8 h-8 rounded-full ${color} border-2 transition-all ${
+                          categoryFormData.color === color ? 'border-brand-text scale-110 shadow-sm' : 'border-transparent hover:scale-105'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-brand-border">
+                  <label className="flex items-center justify-between cursor-pointer group">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg transition-colors ${categoryFormData.isPrivate ? 'bg-brand-accent/10' : 'bg-brand-highlight'}`}>
+                        {categoryFormData.isPrivate ? <Lock className="w-4 h-4 text-brand-accent" /> : <Unlock className="w-4 h-4 text-brand-muted" />}
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-widest text-brand-muted font-bold">Privado</span>
+                        <span className="text-[10px] text-brand-muted/70">Requiere PIN para acceder</span>
+                      </div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="sr-only"
+                      checked={categoryFormData.isPrivate}
+                      onChange={(e) => setCategoryFormData({...categoryFormData, isPrivate: e.target.checked})}
+                    />
+                    <div className={`w-10 h-5 rounded-full relative transition-colors ${categoryFormData.isPrivate ? 'bg-brand-accent' : 'bg-brand-border'}`}>
+                      <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${categoryFormData.isPrivate ? 'left-6' : 'left-1'}`} />
+                    </div>
+                  </label>
+                </div>
+
+                {categoryFormData.isPrivate && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    className="overflow-hidden"
+                  >
+                    <label className="block text-[10px] uppercase tracking-widest text-brand-muted font-bold mb-2">PIN de Acceso</label>
+                    <input 
+                      type="password"
+                      maxLength={8}
+                      value={categoryFormData.pin}
+                      onChange={(e) => setCategoryFormData({...categoryFormData, pin: e.target.value})}
+                      placeholder="Mínimo 4 caracteres..."
+                      className="w-full bg-white border border-brand-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-accent transition-all font-mono"
+                    />
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="p-6 bg-brand-sidebar border-t border-brand-border flex items-center justify-between">
+                {editingCategory && (
+                  <button 
+                    onClick={() => handleDeleteCategory(editingCategory.id)}
+                    className="flex items-center gap-2 text-xs font-medium text-red-500 hover:text-red-700 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Eliminar
+                  </button>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  <button 
+                    onClick={handleCloseCategoryModal}
+                    className="px-5 py-2 text-xs font-medium text-brand-secondary hover:text-brand-text"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSaveCategory}
+                    className="bg-brand-accent text-white px-6 py-2.5 rounded-lg text-xs font-bold hover:opacity-90 active:scale-95"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* PIN Entry Modal */}
+      <AnimatePresence>
+        {isPinModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-brand-text/40 backdrop-blur-md" 
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-brand-bg w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden relative z-[110] border border-brand-border p-8 flex flex-col items-center"
+            >
+              <div className="w-12 h-12 bg-brand-accent/10 rounded-full flex items-center justify-center mb-4">
+                <Lock className="w-6 h-6 text-brand-accent" />
+              </div>
+              <h3 className="text-lg font-semibold text-brand-text mb-1">Colección Protegida</h3>
+              <p className="text-xs text-brand-muted mb-8">Introduce el PIN para desbloquear el contenido</p>
+
+              <div className="w-full space-y-6">
+                <input 
+                  type="password"
+                  autoFocus
+                  placeholder="PIN"
+                  value={pinEntry}
+                  onChange={(e) => setPinEntry(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
+                  className="w-full bg-white border border-brand-border rounded-xl px-4 py-3 text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-brand-accent transition-all shadow-inner"
+                />
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setIsPinModalOpen(false)}
+                    className="flex-1 px-4 py-3 text-xs font-bold uppercase tracking-wider text-brand-secondary hover:bg-brand-highlight rounded-xl transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handlePinSubmit}
+                    className="flex-1 bg-brand-accent text-white px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all shadow-sm"
+                  >
+                    Acceder
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
