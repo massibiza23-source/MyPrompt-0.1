@@ -404,6 +404,34 @@ export default function App() {
                         <Download className="w-4 h-4" />
                         Descargar Backup
                       </button>
+                      <button 
+                        onClick={() => { 
+                          const link = document.createElement('a');
+                          link.href = '/icon-512.svg';
+                          link.download = 'PromptVault_Icon_Light.svg';
+                          link.click();
+                          setIsToolsOpen(false);
+                          addToast('Icono claro descargado');
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-brand-secondary hover:bg-brand-highlight hover:text-brand-accent rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Icono App (Claro)
+                      </button>
+                      <button 
+                        onClick={() => { 
+                          const link = document.createElement('a');
+                          link.href = '/icon-dark.svg';
+                          link.download = 'PromptVault_Icon_Dark.svg';
+                          link.click();
+                          setIsToolsOpen(false);
+                          addToast('Icono oscuro descargado');
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-brand-secondary hover:bg-brand-highlight hover:text-brand-accent rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Icono App (Oscuro)
+                      </button>
                       <label className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-brand-secondary hover:bg-brand-highlight hover:text-brand-accent rounded-lg cursor-pointer transition-colors">
                         <Upload className="w-4 h-4" />
                         Cargar Backup
